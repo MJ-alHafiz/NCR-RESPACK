@@ -6,23 +6,90 @@
     <meta name="theme-color" content="#102b46" />
     <title>Respack | NCR Management</title>
     <style>
-      .web-search-bar{position:relative;z-index:10;padding:12px 20px;background:#fff;border-bottom:1px solid #e4eaf1}
-      .web-search-form{display:flex;gap:10px;max-width:1100px;margin:0 auto}
-      .web-search-input{flex:1;min-width:0;padding:12px 16px;border:1px solid #cbd5e1;border-radius:8px;color:#243447;font:inherit;outline:none}
-      .web-search-input:focus{border-color:#2563eb;box-shadow:0 0 0 3px #2563eb22}
-      .web-search-button{padding:0 20px;border:0;border-radius:8px;background:#102b46;color:#fff;font:inherit;font-weight:600;white-space:nowrap}
-      .web-search-button:hover{background:#1b456c}
-      @media(max-width:480px){.web-search-bar{padding:10px 12px}.web-search-form{gap:7px}.web-search-button{padding:0 12px}}
+      .hub-search{position:relative;z-index:20;padding:12px 20px;background:#fff;border-bottom:1px solid #e4eaf1}
+      .hub-search-inner{position:relative;max-width:1100px;margin:0 auto}
+      .hub-search-form{display:flex;align-items:center;gap:10px}
+      .hub-search-input{flex:1;min-width:0;padding:12px 16px;border:1px solid #cbd5e1;border-radius:8px;color:#243447;font:inherit;outline:none}
+      .hub-search-input:focus{border-color:#2563eb;box-shadow:0 0 0 3px #2563eb22}
+      .hub-search-button{padding:12px 20px;border:0;border-radius:8px;background:#102b46;color:#fff;font:inherit;font-weight:600;white-space:nowrap;cursor:pointer}
+      .hub-search-button:hover{background:#1b456c}
+      .hub-search-results{position:absolute;top:calc(100% + 8px);left:0;right:0;max-height:min(65vh,480px);overflow:auto;background:#fff;border:1px solid #dbe3ec;border-radius:10px;box-shadow:0 12px 30px #102b4622}
+      .hub-search-results[hidden]{display:none}
+      .hub-search-summary{padding:12px 16px;color:#64748b;font-size:13px;border-bottom:1px solid #edf1f5}
+      .hub-search-result{padding:12px 16px;border-bottom:1px solid #edf1f5}
+      .hub-search-result:last-child{border-bottom:0}
+      .hub-search-result strong{display:block;color:#102b46}
+      .hub-search-result span{display:block;margin-top:4px;color:#64748b;font-size:13px;overflow-wrap:anywhere}
+      .hub-search-empty{padding:16px;color:#64748b}
+      @media(max-width:480px){.hub-search{padding:10px 12px}.hub-search-form{gap:7px}.hub-search-button{padding:12px}.hub-search-input{padding:12px}}
     </style>
   </head>
   <body>
-    <div class="web-search-bar">
-      <form class="web-search-form" action="https://duckduckgo.com/" method="get" target="_blank" rel="noopener noreferrer" role="search" aria-label="Search the web">
-        <input class="web-search-input" type="search" name="q" placeholder="Search the web with DuckDuckGo..." aria-label="Search the web" required />
-        <button class="web-search-button" type="submit">Search web</button>
-      </form>
-    </div>
+    <section class="hub-search" aria-label="Search NCR Hub">
+      <div class="hub-search-inner">
+        <form class="hub-search-form" id="hub-search-form" role="search">
+          <input class="hub-search-input" id="hub-search-input" type="search" placeholder="Search all NCR Hub records..." aria-label="Search all NCR Hub records" autocomplete="off" />
+          <button class="hub-search-button" type="submit">Search NCRs</button>
+        </form>
+        <div class="hub-search-results" id="hub-search-results" role="region" aria-live="polite" aria-label="NCR search results" hidden></div>
+      </div>
+    </section>
     <div id="root"></div>
+    <script>
+      (() => {
+        const form = document.getElementById('hub-search-form');
+        const input = document.getElementById('hub-search-input');
+        const results = document.getElementById('hub-search-results');
+        const storageKey = 'respack-ncr-records';
+        const renderResults = () => {
+          const term = input.value.trim().toLocaleLowerCase();
+          if (!term) { results.hidden = true; results.replaceChildren(); return; }
+          results.hidden = false;
+          let records = [];
+          try {
+            const parsed = JSON.parse(localStorage.getItem(storageKey) || '[]');
+            records = Array.isArray(parsed) ? parsed : [];
+          } catch { records = []; }
+          const matches = records.filter(record => Object.values(record || {}).some(value => String(value ?? '').toLocaleLowerCase().includes(term)));
+          results.replaceChildren();
+          const summary = document.createElement('div');
+          summary.className = 'hub-search-summary';
+          summary.textContent = `${matches.length} matching NCR ${matches.length === 1 ? 'record' : 'records'}`;
+          results.append(summary);
+          if (!matches.length) {
+            const empty = document.createElement('div');
+            empty.className = 'hub-search-empty';
+            empty.textContent = records.length ? 'No NCR records match your search.' : 'There are no NCR records saved in this browser yet.';
+            results.append(empty);
+            return;
+          }
+          matches.slice(0, 50).forEach(record => {
+            const item = document.createElement('div');
+            item.className = 'hub-search-result';
+            const title = document.createElement('strong');
+            title.textContent = [record.id || 'NCR record', record.type, record.status].filter(Boolean).join(' · ');
+            item.append(title);
+            const detail = Object.entries(record).filter(([key, value]) => key !== 'id' && value != null && String(value).toLocaleLowerCase().includes(term)).slice(0, 3).map(([, value]) => String(value)).join(' — ');
+            if (detail) {
+              const text = document.createElement('span');
+              text.textContent = detail;
+              item.append(text);
+            }
+            results.append(item);
+          });
+          if (matches.length > 50) {
+            const note = document.createElement('div');
+            note.className = 'hub-search-summary';
+            note.textContent = `Showing the first 50 of ${matches.length} matches.`;
+            results.append(note);
+          }
+        };
+        form.addEventListener('submit', event => { event.preventDefault(); renderResults(); });
+        input.addEventListener('input', renderResults);
+        document.addEventListener('click', event => { if (!event.target.closest('.hub-search-inner')) results.hidden = true; });
+        input.addEventListener('focus', () => { if (input.value.trim()) renderResults(); });
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
